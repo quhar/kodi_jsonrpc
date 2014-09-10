@@ -1,8 +1,8 @@
 # xbmc_jsonrpc
-[![GoDoc](https://godoc.org/github.com/streamboat/xbmc_jsonrpc?status.svg)](http://godoc.org/github.com/streamboat/xbmc_jsonrpc) ![License-MIT](http://img.shields.io/badge/license-MIT-red.svg)
+[![GoDoc](https://godoc.org/github.com/StreamBoat/xbmc_jsonrpc?status.svg)](http://godoc.org/github.com/StreamBoat/xbmc_jsonrpc) ![License-MIT](http://img.shields.io/badge/license-MIT-red.svg)
 
 ```go
-import "github.com/streamboat/xbmc_jsonrpc"
+import "github.com/StreamBoat/xbmc_jsonrpc"
 ```
 
 Package xbmc_jsonrpc provides an interface for communicating with an XBMC server
