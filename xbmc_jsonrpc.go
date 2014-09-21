@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	VERSION = `0.0.1`
+	VERSION = `0.0.2`
 
 	// Minimum XBMC API version
 	XBMC_MIN_VERSION = 6
