@@ -4,7 +4,7 @@ import "fmt"
 
 func ExampleNew() {
 	xbmc, err := New(`localhost:9090`, 15) // timeout after 15 secs
-	defer xbmc.Close()                     // always close to shut down pools, etc
+	defer xbmc.Close()                     // always close to free resources
 
 	if err != nil {
 		panic(fmt.Sprintf(`Couldn't connect to XBMC: %v`, err))

@@ -12,13 +12,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/op/go-logging"
-	"github.com/stefantalpalaru/pool"
 )
 
 const (
@@ -44,7 +42,6 @@ type Connection struct {
 	lock          sync.Mutex
 	requestId     uint32
 	responses     map[uint32]*chan *rpcResponse
-	pool          *pool.Pool
 
 	address string
 }
@@ -194,9 +191,6 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 	c.enc = json.NewEncoder(c.conn)
 	c.dec = json.NewDecoder(c.conn)
 
-	c.pool = pool.New(runtime.NumCPU() * 3)
-	c.pool.Run()
-
 	go c.reader()
 	go c.writer()
 
@@ -327,6 +321,5 @@ func (c *Connection) Close() {
 	}
 	close(c.write)
 	close(c.Notifications)
-	c.pool.Stop()
 	c.conn.Close()
 }
