@@ -44,6 +44,7 @@ type Connection struct {
 	responses     map[uint32]*chan *rpcResponse
 
 	address string
+	timeout time.Duration
 }
 
 // RPC Request type
@@ -133,8 +134,6 @@ func SetLogLevel(level string) error {
 
 // Return the result and any errors from the response channel
 func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{}, err error) {
-	//if timeout == 0
-
 	if rchan.Pending != true {
 		return result, errors.New(`No pending responses!`)
 	}
@@ -178,6 +177,9 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 	if c.address == `` {
 		c.address = address
 	}
+	if c.timeout == 0 && timeout != 0 {
+		c.timeout = timeout
+	}
 
 	if err = c.connect(); err != nil {
 		return err
@@ -196,7 +198,7 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 
 	rchan := c.Send(Request{Method: `JSONRPC.Version`}, true)
 
-	res, err := rchan.Read(timeout)
+	res, err := rchan.Read(c.timeout)
 	if err != nil {
 		logger.Error(`XBMC responded: %v`, err)
 		return err
@@ -243,6 +245,9 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 
 // connect establishes a TCP connection
 func (c *Connection) connect() (err error) {
+	// Reset any existing connections before attempting new Dial
+	c.Close()
+
 	c.conn, err = net.Dial(`tcp`, c.address)
 	for err != nil {
 		logger.Error(`Connecting to XBMC: %v`, err)
@@ -275,10 +280,7 @@ func (c *Connection) reader() {
 		if err == io.EOF {
 			logger.Error(`Reading from XBMC: %v`, err)
 			logger.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
-			time.Sleep(time.Second)
-			if err = c.connect(); err != nil {
-				logger.Error(`Reconnecting to XBMC: %v`, err)
-			}
+			err = c.init(c.address, c.timeout)
 		} else if err != nil {
 			logger.Error(`Decoding response from XBMC: %v`, err)
 		} else {
@@ -317,9 +319,17 @@ func (c *Connection) reader() {
 // Close XBMC connection
 func (c *Connection) Close() {
 	for _, v := range c.responses {
-		close(*v)
+		if v != nil {
+			close(*v)
+		}
 	}
-	close(c.write)
-	close(c.Notifications)
-	c.conn.Close()
+	if c.write != nil {
+		close(c.write)
+	}
+	if c.Notifications != nil {
+		close(c.Notifications)
+	}
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
 }
