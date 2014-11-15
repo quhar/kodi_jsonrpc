@@ -265,7 +265,11 @@ func (c *Connection) writer() {
 	for {
 		var req interface{}
 		req = <-c.write
-		if err := c.enc.Encode(req); err != nil {
+		err := c.enc.Encode(req)
+		if _, ok := err.(net.Error); ok {
+			err = c.init(c.address, c.timeout)
+			c.enc.Encode(req)
+		} else if err != nil {
 			logger.Warning(`Failed encoding request for XBMC: %v`, err)
 			break
 		}
@@ -277,40 +281,40 @@ func (c *Connection) reader() {
 	for {
 		res := new(rpcResponse)
 		err := c.dec.Decode(res)
-		if err == io.EOF {
+		if _, ok := err.(net.Error); err == io.EOF || ok {
 			logger.Error(`Reading from XBMC: %v`, err)
 			logger.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
 			err = c.init(c.address, c.timeout)
 		} else if err != nil {
 			logger.Error(`Decoding response from XBMC: %v`, err)
-		} else {
-			if res.Id == nil && res.Method != nil {
-				logger.Debug(`Received notification from XBMC: %v`, *res.Method)
-				n := Notification{}
-				n.Method = *res.Method
-				mapstructure.Decode(res.Params, &n.Params)
-				c.Notifications <- n
-			} else if res.Id != nil {
-				if ch := c.responses[uint32(*res.Id)]; ch != nil {
-					if res.Result != nil {
-						logger.Debug(`Received response from XBMC: %v`, *res.Result)
-					}
-					*ch <- res
-				} else {
-					logger.Warning(
-						`Received XBMC response for unknown request: %v`,
-						*res.Id,
-					)
-					logger.Debug(
-						`Current response channels: %v`, c.responses,
-					)
+			continue
+		}
+		if res.Id == nil && res.Method != nil {
+			logger.Debug(`Received notification from XBMC: %v`, *res.Method)
+			n := Notification{}
+			n.Method = *res.Method
+			mapstructure.Decode(res.Params, &n.Params)
+			c.Notifications <- n
+		} else if res.Id != nil {
+			if ch := c.responses[uint32(*res.Id)]; ch != nil {
+				if res.Result != nil {
+					logger.Debug(`Received response from XBMC: %v`, *res.Result)
 				}
+				*ch <- res
 			} else {
-				if res.Error != nil {
-					logger.Warning(`Received unparseable XBMC response: %v`, res.Error)
-				} else {
-					logger.Warning(`Received unparseable XBMC response: %v`, res)
-				}
+				logger.Warning(
+					`Received XBMC response for unknown request: %v`,
+					*res.Id,
+				)
+				logger.Debug(
+					`Current response channels: %v`, c.responses,
+				)
+			}
+		} else {
+			if res.Error != nil {
+				logger.Warning(`Received unparseable XBMC response: %v`, res.Error)
+			} else {
+				logger.Warning(`Received unparseable XBMC response: %v`, res)
 			}
 		}
 	}
