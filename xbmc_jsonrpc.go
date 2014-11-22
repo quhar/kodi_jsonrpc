@@ -15,22 +15,9 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/mitchellh/mapstructure"
-	"github.com/op/go-logging"
 )
-
-const (
-	VERSION = `0.0.4`
-
-	// Minimum XBMC API version
-	XBMC_MIN_VERSION = 6
-
-	// Logger properties
-	LOG_FORMAT = `[%{color}%{level}%{color:reset}] %{message}`
-	LOG_MODULE = `xbmc_jsonrpc`
-)
-
-var logger *logging.Logger
 
 // Main type for interacting with XBMC
 type Connection struct {
@@ -90,11 +77,23 @@ type Notification struct {
 	} `json:"params" mapstructure:"params"`
 }
 
+const (
+	VERSION = `0.0.4`
+
+	// Minimum XBMC API version
+	XBMC_MIN_VERSION = 6
+
+	LogDebugLevel = log.DebugLevel
+	LogInfoLevel  = log.InfoLevel
+	LogWarnLevel  = log.WarnLevel
+	LogErrorLevel = log.ErrorLevel
+	LogFatalLevel = log.FatalLevel
+	LogPanicLevel = log.PanicLevel
+)
+
 func init() {
-	// Initialize logger, default to level `info`
-	logging.SetFormatter(logging.MustStringFormatter(LOG_FORMAT))
-	logger = logging.MustGetLogger(LOG_MODULE)
-	logging.SetLevel(logging.INFO, LOG_MODULE)
+	// Initialize logger, default to level Info
+	log.SetLevel(LogInfoLevel)
 }
 
 // New returns a Connection to the specified address.
@@ -110,26 +109,16 @@ func New(address string, timeout time.Duration) (conn Connection, err error) {
 	return conn, err
 }
 
-// SetLogLevel adjusts the level of logger output
-func SetLogLevel(level string) error {
-	switch level {
-	case `debug`, `DEBUG`:
-		logging.SetLevel(logging.DEBUG, LOG_MODULE)
-	case `notice`, `NOTICE`:
-		logging.SetLevel(logging.NOTICE, LOG_MODULE)
-	case `info`, `INFO`:
-		logging.SetLevel(logging.INFO, LOG_MODULE)
-	case `warning`, `WARNING`, `warn`, `WARN`:
-		logging.SetLevel(logging.WARNING, LOG_MODULE)
-	case `error`, `ERROR`:
-		logging.SetLevel(logging.ERROR, LOG_MODULE)
-	case `critical`, `CRITICAL`, `crit`, `CRIT`:
-		logging.SetLevel(logging.CRITICAL, LOG_MODULE)
-	default:
-		return errors.New(fmt.Sprintf(`Unknown log level: %s`, level))
-	}
-
-	return nil
+// SetLogLevel adjusts the level of logger output, level must be one of:
+//
+// LogDebugLevel
+// LogInfoLevel
+// LogWarnLevel
+// LogErrorLevel
+// LogFatalLevel
+// LogPanicLevel
+func SetLogLevel(level log.Level) {
+	log.SetLevel(level)
 }
 
 // Return the result and any errors from the response channel
@@ -167,7 +156,7 @@ func (res *rpcResponse) unpack() (result map[string]interface{}, err error) {
 	} else if res.Result != nil {
 		result = *res.Result
 	} else {
-		logger.Debug(`Received unknown response type from XBMC: %v`, res)
+		log.WithField(`response`, res).Debug(`Received unknown response type from XBMC`)
 	}
 	return result, err
 }
@@ -200,7 +189,7 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 
 	res, err := rchan.Read(c.timeout)
 	if err != nil {
-		logger.Error(`XBMC responded: %v`, err)
+		log.WithField(`error`, err).Error(`XBMC responded`)
 		return err
 	}
 	if version := res[`version`].(map[string]interface{}); version != nil {
@@ -209,7 +198,7 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 		}
 	}
 
-	logger.Info(`Connected to XBMC`)
+	log.Info(`Connected to XBMC`)
 
 	return
 }
@@ -230,12 +219,12 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 		c.lock.Unlock()
 		req.Id = &id
 
-		logger.Debug(`Sending XBMC Request (response requested): %v`, req)
+		log.WithField(`request`, req).Debug(`Sending XBMC Request (response desired)`)
 		c.write <- req
 		res.channel = &ch
 		res.Pending = true
 	} else {
-		logger.Debug(`Sending XBMC Request (no response requested): %v`, req)
+		log.WithField(`request`, req).Debug(`Sending XBMC Request (response undesired)`)
 		c.write <- req
 		res.Pending = false
 	}
@@ -250,8 +239,8 @@ func (c *Connection) connect() (err error) {
 
 	c.conn, err = net.Dial(`tcp`, c.address)
 	for err != nil {
-		logger.Error(`Connecting to XBMC: %v`, err)
-		logger.Info(`Attempting reconnect...`)
+		log.WithField(`error`, err).Error(`Connecting to XBMC`)
+		log.Info(`Attempting reconnect...`)
 		time.Sleep(time.Second)
 		c.conn, err = net.Dial(`tcp`, c.address)
 	}
@@ -270,7 +259,7 @@ func (c *Connection) writer() {
 			err = c.init(c.address, c.timeout)
 			c.enc.Encode(req)
 		} else if err != nil {
-			logger.Warning(`Failed encoding request for XBMC: %v`, err)
+			log.WithField(`error`, err).Warn(`Failed encoding request for XBMC`)
 			break
 		}
 	}
@@ -282,15 +271,15 @@ func (c *Connection) reader() {
 		res := new(rpcResponse)
 		err := c.dec.Decode(res)
 		if _, ok := err.(net.Error); err == io.EOF || ok {
-			logger.Error(`Reading from XBMC: %v`, err)
-			logger.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
+			log.WithField(`error`, err).Error(`Reading from XBMC`)
+			log.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
 			err = c.init(c.address, c.timeout)
 		} else if err != nil {
-			logger.Error(`Decoding response from XBMC: %v`, err)
+			log.WithField(`error`, err).Error(`Decoding response from XBMC`)
 			continue
 		}
 		if res.Id == nil && res.Method != nil {
-			logger.Debug(`Received notification from XBMC: %v`, *res.Method)
+			log.WithField(`response.Method`, *res.Method).Debug(`Received notification from XBMC`)
 			n := Notification{}
 			n.Method = *res.Method
 			mapstructure.Decode(res.Params, &n.Params)
@@ -298,23 +287,18 @@ func (c *Connection) reader() {
 		} else if res.Id != nil {
 			if ch := c.responses[uint32(*res.Id)]; ch != nil {
 				if res.Result != nil {
-					logger.Debug(`Received response from XBMC: %v`, *res.Result)
+					log.WithField(`response.Result`, *res.Result).Debug(`Received response from XBMC`)
 				}
 				*ch <- res
 			} else {
-				logger.Warning(
-					`Received XBMC response for unknown request: %v`,
-					*res.Id,
-				)
-				logger.Debug(
-					`Current response channels: %v`, c.responses,
-				)
+				log.WithField(`response.Id`, *res.Id).Warn(`Received XBMC response for unknown request`)
+				log.WithField(`connection.responses`, c.responses).Debug(`Current response channels`)
 			}
 		} else {
 			if res.Error != nil {
-				logger.Warning(`Received unparseable XBMC response: %v`, res.Error)
+				log.WithField(`response.Error`, *res.Error).Warn(`Received unparseable XBMC response`)
 			} else {
-				logger.Warning(`Received unparseable XBMC response: %v`, res)
+				log.WithField(`response`, res).Warn(`Received unparseable XBMC response`)
 			}
 		}
 	}
