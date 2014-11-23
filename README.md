@@ -1,14 +1,13 @@
-# xbmc_jsonrpc
+# kodi_jsonrpc
 [![GoDoc](https://godoc.org/github.com/StreamBoat/xbmc_jsonrpc?status.svg)](http://godoc.org/github.com/StreamBoat/xbmc_jsonrpc) ![License-MIT](http://img.shields.io/badge/license-MIT-red.svg)
-
 ```go
 import "github.com/StreamBoat/xbmc_jsonrpc"
 ```
 
-Package xbmc_jsonrpc provides an interface for communicating with an XBMC server
-via the raw JSON-RPC socket
+Package `kodi_jsonrpc` provides an interface for communicating with a Kodi/XBMC
+server via the raw JSON-RPC socket
 
-Extracted from the xbmc-callback-daemon.
+Extracted from the kodi-callback-daemon.
 
 Released under the terms of the MIT License (see LICENSE).
 
@@ -16,23 +15,29 @@ Released under the terms of the MIT License (see LICENSE).
 
 ```go
 const (
-	VERSION = `0.0.1`
+	VERSION = `1.0.0`
 
-	// Minimum XBMC API version
-	XBMC_MIN_VERSION = 6
+	// Minimum Kodi/XBMC API version
+	KODI_MIN_VERSION = 6
 
-	// Logger properties
-	LOG_FORMAT = `[%{color}%{level}%{color:reset}] %{message}`
-	LOG_MODULE = `xbmc_jsonrpc`
+	LogDebugLevel = log.DebugLevel
+	LogInfoLevel  = log.InfoLevel
+	LogWarnLevel  = log.WarnLevel
+	LogErrorLevel = log.ErrorLevel
+	LogFatalLevel = log.FatalLevel
+	LogPanicLevel = log.PanicLevel
 )
 ```
 
 #### func  SetLogLevel
 
 ```go
-func SetLogLevel(level string) error
+func SetLogLevel(level log.Level)
 ```
-SetLogLevel adjusts the level of logger output
+SetLogLevel adjusts the level of logger output, level must be one of:
+
+LogDebugLevel LogInfoLevel LogWarnLevel LogErrorLevel LogFatalLevel
+LogPanicLevel
 
 #### type Connection
 
@@ -42,7 +47,7 @@ type Connection struct {
 }
 ```
 
-Main type for interacting with XBMC
+Main type for interacting with Kodi
 
 #### func  New
 
@@ -56,20 +61,20 @@ within this time.
 User must ensure Close() is called on returned Connection when finished with it,
 to avoid leaks.
 
-#### func (*Connection) Close
+#### func (\*Connection) Close
 
 ```go
 func (c *Connection) Close()
 ```
-Close XBMC connection
+Close Kodi connection
 
-#### func (*Connection) Send
+#### func (\*Connection) Send
 
 ```go
 func (c *Connection) Send(req Request, want_response bool) Response
 ```
-Send an RPC Send to the XBMC server. Returns a Response, but does not attach a
-channel for it if want_response is false (for fire-and-forget commands that
+Send an RPC Send to the Kodi server. Returns a Response, but does not attach a
+channel for it if `want_response` is false (for fire-and-forget commands that
 don't return any useful response).
 
 #### type Notification
@@ -87,7 +92,7 @@ type Notification struct {
 }
 ```
 
-Notification stores XBMC server->client notifications.
+Notification stores Kodi server->client notifications.
 
 #### type Request
 
@@ -112,7 +117,7 @@ type Response struct {
 
 RPC Response provides a reader for returning responses
 
-#### func (*Response) Read
+#### func (\*Response) Read
 
 ```go
 func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{}, err error)
