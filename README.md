@@ -1,4 +1,4 @@
-# kodi_jsonrpc
+# kodi\_jsonrpc
 [![GoDoc](https://godoc.org/github.com/StreamBoat/kodi_jsonrpc?status.svg)](http://godoc.org/github.com/StreamBoat/kodi_jsonrpc) ![License-MIT](http://img.shields.io/badge/license-MIT-red.svg)
 ```go
 import "github.com/StreamBoat/kodi_jsonrpc"
@@ -15,7 +15,7 @@ Released under the terms of the MIT License (see LICENSE).
 
 ```go
 const (
-	VERSION = `1.0.0`
+	VERSION = `1.0.1`
 
 	// Minimum Kodi/XBMC API version
 	KODI_MIN_VERSION = 6
@@ -44,6 +44,9 @@ LogPanicLevel
 ```go
 type Connection struct {
 	Notifications chan Notification
+
+	Connected bool
+	Closed    bool
 }
 ```
 
