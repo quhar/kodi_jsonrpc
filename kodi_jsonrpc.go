@@ -1,10 +1,10 @@
-// Package xbmc_jsonrpc provides an interface for communicating with an XBMC
+// Package kodi_jsonrpc provides an interface for communicating with a Kodi/XBMC
 // server via the raw JSON-RPC socket
 //
-// Extracted from the xbmc-callback-daemon.
+// Extracted from the kodi-callback-daemon.
 //
 // Released under the terms of the MIT License (see LICENSE).
-package xbmc_jsonrpc
+package kodi_jsonrpc
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-// Main type for interacting with XBMC
+// Main type for interacting with Kodi
 type Connection struct {
 	conn          net.Conn
 	write         chan interface{}
@@ -65,7 +65,7 @@ type rpcResponse struct {
 	Error   *rpcError               `json:"error"`
 }
 
-// Notification stores XBMC server->client notifications.
+// Notification stores Kodi server->client notifications.
 type Notification struct {
 	Method string `json:"method" mapstructure:"method"`
 	Params struct {
@@ -80,8 +80,8 @@ type Notification struct {
 const (
 	VERSION = `0.0.4`
 
-	// Minimum XBMC API version
-	XBMC_MIN_VERSION = 6
+	// Minimum Kodi/XBMC API version
+	KODI_MIN_VERSION = 6
 
 	LogDebugLevel = log.DebugLevel
 	LogInfoLevel  = log.InfoLevel
@@ -151,17 +151,17 @@ func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{
 func (res *rpcResponse) unpack() (result map[string]interface{}, err error) {
 	if res.Error != nil {
 		err = errors.New(fmt.Sprintf(
-			`XBMC error (%v): %v`, res.Error.Code, res.Error.Message,
+			`Kodi error (%v): %v`, res.Error.Code, res.Error.Message,
 		))
 	} else if res.Result != nil {
 		result = *res.Result
 	} else {
-		log.WithField(`response`, res).Debug(`Received unknown response type from XBMC`)
+		log.WithField(`response`, res).Debug(`Received unknown response type from Kodi`)
 	}
 	return result, err
 }
 
-// init brings up an instance of the XBMC Connection
+// init brings up an instance of the Kodi Connection
 func (c *Connection) init(address string, timeout time.Duration) (err error) {
 	if c.address == `` {
 		c.address = address
@@ -189,21 +189,21 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 
 	res, err := rchan.Read(c.timeout)
 	if err != nil {
-		log.WithField(`error`, err).Error(`XBMC responded`)
+		log.WithField(`error`, err).Error(`Kodi responded`)
 		return err
 	}
 	if version := res[`version`].(map[string]interface{}); version != nil {
-		if version[`major`].(float64) < XBMC_MIN_VERSION {
-			return errors.New(`XBMC version too low, upgrade to Frodo or later`)
+		if version[`major`].(float64) < KODI_MIN_VERSION {
+			return errors.New(`Kodi version too low, upgrade to Frodo or later`)
 		}
 	}
 
-	log.Info(`Connected to XBMC`)
+	log.Info(`Connected to Kodi`)
 
 	return
 }
 
-// Send an RPC Send to the XBMC server.
+// Send an RPC Send to the Kodi server.
 // Returns a Response, but does not attach a channel for it if want_response is
 // false (for fire-and-forget commands that don't return any useful response).
 func (c *Connection) Send(req Request, want_response bool) Response {
@@ -219,12 +219,12 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 		c.lock.Unlock()
 		req.Id = &id
 
-		log.WithField(`request`, req).Debug(`Sending XBMC Request (response desired)`)
+		log.WithField(`request`, req).Debug(`Sending Kodi Request (response desired)`)
 		c.write <- req
 		res.channel = &ch
 		res.Pending = true
 	} else {
-		log.WithField(`request`, req).Debug(`Sending XBMC Request (response undesired)`)
+		log.WithField(`request`, req).Debug(`Sending Kodi Request (response undesired)`)
 		c.write <- req
 		res.Pending = false
 	}
@@ -239,7 +239,7 @@ func (c *Connection) connect() (err error) {
 
 	c.conn, err = net.Dial(`tcp`, c.address)
 	for err != nil {
-		log.WithField(`error`, err).Error(`Connecting to XBMC`)
+		log.WithField(`error`, err).Error(`Connecting to Kodi`)
 		log.Info(`Attempting reconnect...`)
 		time.Sleep(time.Second)
 		c.conn, err = net.Dial(`tcp`, c.address)
@@ -259,7 +259,7 @@ func (c *Connection) writer() {
 			err = c.init(c.address, c.timeout)
 			c.enc.Encode(req)
 		} else if err != nil {
-			log.WithField(`error`, err).Warn(`Failed encoding request for XBMC`)
+			log.WithField(`error`, err).Warn(`Failed encoding request for Kodi`)
 			break
 		}
 	}
@@ -271,15 +271,15 @@ func (c *Connection) reader() {
 		res := new(rpcResponse)
 		err := c.dec.Decode(res)
 		if _, ok := err.(net.Error); err == io.EOF || ok {
-			log.WithField(`error`, err).Error(`Reading from XBMC`)
+			log.WithField(`error`, err).Error(`Reading from Kodi`)
 			log.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
 			err = c.init(c.address, c.timeout)
 		} else if err != nil {
-			log.WithField(`error`, err).Error(`Decoding response from XBMC`)
+			log.WithField(`error`, err).Error(`Decoding response from Kodi`)
 			continue
 		}
 		if res.Id == nil && res.Method != nil {
-			log.WithField(`response.Method`, *res.Method).Debug(`Received notification from XBMC`)
+			log.WithField(`response.Method`, *res.Method).Debug(`Received notification from Kodi`)
 			n := Notification{}
 			n.Method = *res.Method
 			mapstructure.Decode(res.Params, &n.Params)
@@ -287,24 +287,24 @@ func (c *Connection) reader() {
 		} else if res.Id != nil {
 			if ch := c.responses[uint32(*res.Id)]; ch != nil {
 				if res.Result != nil {
-					log.WithField(`response.Result`, *res.Result).Debug(`Received response from XBMC`)
+					log.WithField(`response.Result`, *res.Result).Debug(`Received response from Kodi`)
 				}
 				*ch <- res
 			} else {
-				log.WithField(`response.Id`, *res.Id).Warn(`Received XBMC response for unknown request`)
+				log.WithField(`response.Id`, *res.Id).Warn(`Received Kodi response for unknown request`)
 				log.WithField(`connection.responses`, c.responses).Debug(`Current response channels`)
 			}
 		} else {
 			if res.Error != nil {
-				log.WithField(`response.Error`, *res.Error).Warn(`Received unparseable XBMC response`)
+				log.WithField(`response.Error`, *res.Error).Warn(`Received unparseable Kodi response`)
 			} else {
-				log.WithField(`response`, res).Warn(`Received unparseable XBMC response`)
+				log.WithField(`response`, res).Warn(`Received unparseable Kodi response`)
 			}
 		}
 	}
 }
 
-// Close XBMC connection
+// Close Kodi connection
 func (c *Connection) Close() {
 	for _, v := range c.responses {
 		if v != nil {
