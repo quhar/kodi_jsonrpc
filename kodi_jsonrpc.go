@@ -21,14 +21,19 @@ import (
 
 // Main type for interacting with Kodi
 type Connection struct {
-	conn          net.Conn
-	write         chan interface{}
-	Notifications chan Notification
-	enc           *json.Encoder
-	dec           *json.Decoder
-	lock          sync.Mutex
-	requestId     uint32
-	responses     map[uint32]*chan *rpcResponse
+	conn             net.Conn
+	write            chan interface{}
+	Notifications    chan Notification
+	enc              *json.Encoder
+	dec              *json.Decoder
+	responseLock     sync.Mutex
+	writeWait        sync.WaitGroup
+	notificationWait sync.WaitGroup
+	requestId        uint32
+	responses        map[uint32]*chan *rpcResponse
+
+	Connected bool
+	Closed    bool
 
 	address string
 	timeout time.Duration
@@ -143,6 +148,7 @@ func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{
 	if err == nil {
 		result, err = res.unpack()
 	}
+	close(*rchan.channel)
 
 	return result, err
 }
@@ -163,6 +169,7 @@ func (res *rpcResponse) unpack() (result map[string]interface{}, err error) {
 
 // init brings up an instance of the Kodi Connection
 func (c *Connection) init(address string, timeout time.Duration) (err error) {
+
 	if c.address == `` {
 		c.address = address
 	}
@@ -174,13 +181,10 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 		return err
 	}
 
-	c.write = make(chan interface{}, 4)
-	c.Notifications = make(chan Notification, 4)
+	c.write = make(chan interface{}, 16)
+	c.Notifications = make(chan Notification, 16)
 
 	c.responses = make(map[uint32]*chan *rpcResponse)
-
-	c.enc = json.NewEncoder(c.conn)
-	c.dec = json.NewDecoder(c.conn)
 
 	go c.reader()
 	go c.writer()
@@ -198,8 +202,6 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 		}
 	}
 
-	log.Info(`Connected to Kodi`)
-
 	return
 }
 
@@ -210,13 +212,14 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 	req.JsonRPC = `2.0`
 	res := Response{}
 
+	c.writeWait.Add(1)
 	if want_response == true {
-		c.lock.Lock()
+		c.responseLock.Lock()
 		id := c.requestId
 		ch := make(chan *rpcResponse)
 		c.responses[id] = &ch
 		c.requestId++
-		c.lock.Unlock()
+		c.responseLock.Unlock()
 		req.Id = &id
 
 		log.WithField(`request`, req).Debug(`Sending Kodi Request (response desired)`)
@@ -228,14 +231,19 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 		c.write <- req
 		res.Pending = false
 	}
+	c.writeWait.Done()
 
 	return res
 }
 
+// set whether we're connected or not
+func (c *Connection) connected(status bool) {
+}
+
 // connect establishes a TCP connection
 func (c *Connection) connect() (err error) {
-	// Reset any existing connections before attempting new Dial
-	c.Close()
+	c.connected(false)
+	defer c.connected(true)
 
 	c.conn, err = net.Dial(`tcp`, c.address)
 	for err != nil {
@@ -245,6 +253,11 @@ func (c *Connection) connect() (err error) {
 		c.conn, err = net.Dial(`tcp`, c.address)
 	}
 	err = nil
+
+	c.enc = json.NewEncoder(c.conn)
+	c.dec = json.NewDecoder(c.conn)
+
+	log.Info(`Connected to Kodi`)
 
 	return
 }
@@ -256,11 +269,12 @@ func (c *Connection) writer() {
 		req = <-c.write
 		err := c.enc.Encode(req)
 		if _, ok := err.(net.Error); ok {
-			err = c.init(c.address, c.timeout)
+			err = c.connect()
 			c.enc.Encode(req)
 		} else if err != nil {
 			log.WithField(`error`, err).Warn(`Failed encoding request for Kodi`)
-			break
+			err = c.connect()
+			c.enc.Encode(req)
 		}
 	}
 }
@@ -273,17 +287,19 @@ func (c *Connection) reader() {
 		if _, ok := err.(net.Error); err == io.EOF || ok {
 			log.WithField(`error`, err).Error(`Reading from Kodi`)
 			log.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
-			err = c.init(c.address, c.timeout)
+			err = c.connect()
 		} else if err != nil {
 			log.WithField(`error`, err).Error(`Decoding response from Kodi`)
 			continue
 		}
 		if res.Id == nil && res.Method != nil {
+			c.notificationWait.Add(1)
 			log.WithField(`response.Method`, *res.Method).Debug(`Received notification from Kodi`)
 			n := Notification{}
 			n.Method = *res.Method
 			mapstructure.Decode(res.Params, &n.Params)
 			c.Notifications <- n
+			c.notificationWait.Done()
 		} else if res.Id != nil {
 			if ch := c.responses[uint32(*res.Id)]; ch != nil {
 				if res.Result != nil {
@@ -306,18 +322,22 @@ func (c *Connection) reader() {
 
 // Close Kodi connection
 func (c *Connection) Close() {
-	for _, v := range c.responses {
-		if v != nil {
-			close(*v)
-		}
+	if c.Closed {
+		return
 	}
+	c.Closed = true
+
 	if c.write != nil {
+		c.writeWait.Wait()
 		close(c.write)
 	}
 	if c.Notifications != nil {
+		c.notificationWait.Wait()
 		close(c.Notifications)
 	}
 	if c.conn != nil {
 		_ = c.conn.Close()
 	}
+
+	log.Info(`Disconnected from Kodi`)
 }
