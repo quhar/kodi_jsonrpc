@@ -86,7 +86,7 @@ type Notification struct {
 }
 
 const (
-	VERSION = `1.0.2`
+	VERSION = `1.0.3`
 
 	// Minimum Kodi/XBMC API version
 	KODI_MIN_VERSION = 6
