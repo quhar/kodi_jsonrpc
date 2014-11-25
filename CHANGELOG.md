@@ -1,4 +1,23 @@
 
+<a name="v1.0.3"></a>
+# v1.0.3 (2014-11-25)
+
+## :house: Housekeeping
+
+- **concurrency**:
+  - Improve concurrency support for Read operation ([380de829](https://github.com/StreamBoat/kodi_jsonrpc/commit/380de829d0eeadcaf5d457daa80d79c0404a3c6c))  
+    <br>Also, add timeout support to initial connection
+
+
+<a name="v1.0.2"></a>
+# v1.0.2 (2014-11-25)
+
+## :bug: Bug Fixes
+
+- **reconnect**:
+  - Add reconnect locking and actually update `Connected` ([32b5b63e](https://github.com/StreamBoat/kodi_jsonrpc/commit/32b5b63e3840c122abdc787e34e9f7c6ace16702))
+
+
 <a name="v1.0.1"></a>
 # v1.0.1 (2014-11-23)
 

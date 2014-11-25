@@ -15,7 +15,7 @@ Released under the terms of the MIT License (see LICENSE).
 
 ```go
 const (
-	VERSION = `1.0.1`
+	VERSION = `1.0.3`
 
 	// Minimum Kodi/XBMC API version
 	KODI_MIN_VERSION = 6
@@ -58,7 +58,7 @@ Main type for interacting with Kodi
 func New(address string, timeout time.Duration) (conn Connection, err error)
 ```
 New returns a Connection to the specified address. If timeout (seconds) is
-greater than zero, connection will fail if initial version query is not returned
+greater than zero, connection will fail if initial connection is not established
 within this time.
 
 User must ensure Close() is called on returned Connection when finished with it,
@@ -125,4 +125,5 @@ RPC Response provides a reader for returning responses
 ```go
 func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{}, err error)
 ```
-Return the result and any errors from the response channel
+Return the result and any errors from the response channel If timeout (seconds)
+is greater than zero, read will fail if not returned within this time.
