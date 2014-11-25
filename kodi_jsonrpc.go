@@ -27,6 +27,8 @@ type Connection struct {
 	enc              *json.Encoder
 	dec              *json.Decoder
 	responseLock     sync.Mutex
+	connectedLock    sync.Mutex
+	connectLock      sync.Mutex
 	writeWait        sync.WaitGroup
 	notificationWait sync.WaitGroup
 	requestId        uint32
@@ -238,13 +240,28 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 
 // set whether we're connected or not
 func (c *Connection) connected(status bool) {
+	c.connectedLock.Lock()
+	defer c.connectedLock.Unlock()
+	c.Connected = status
 }
 
 // connect establishes a TCP connection
 func (c *Connection) connect() (err error) {
 	c.connected(false)
+	c.connectLock.Lock()
 	defer c.connected(true)
+	defer c.connectLock.Unlock()
 
+	// If we blocked on the lock, and another routine connected in the mean
+	// time, return early
+	if c.Connected {
+		c.connectLock.Unlock()
+		return
+	}
+
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
 	c.conn, err = net.Dial(`tcp`, c.address)
 	for err != nil {
 		log.WithField(`error`, err).Error(`Connecting to Kodi`)
