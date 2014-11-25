@@ -58,8 +58,9 @@ type rpcError struct {
 
 // RPC Response provides a reader for returning responses
 type Response struct {
-	channel *chan *rpcResponse
-	Pending bool // If Pending is false, Response is unwanted, or been consumed
+	channel  *chan *rpcResponse
+	Pending  bool // If Pending is false, Response is unwanted, or been consumed
+	readLock sync.Mutex
 }
 
 // RPC response type
@@ -105,7 +106,7 @@ func init() {
 
 // New returns a Connection to the specified address.
 // If timeout (seconds) is greater than zero, connection will fail if initial
-// version query is not returned within this time.
+// connection is not established within this time.
 //
 // User must ensure Close() is called on returned Connection when finished with
 // it, to avoid leaks.
@@ -129,7 +130,16 @@ func SetLogLevel(level log.Level) {
 }
 
 // Return the result and any errors from the response channel
+// If timeout (seconds) is greater than zero, read will fail if not returned
+// within this time.
 func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{}, err error) {
+	rchan.readLock.Lock()
+	defer close(*rchan.channel)
+	defer func() {
+		rchan.Pending = false
+	}()
+	defer rchan.readLock.Unlock()
+
 	if rchan.Pending != true {
 		return result, errors.New(`No pending responses!`)
 	}
@@ -142,15 +152,15 @@ func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{
 		select {
 		case res = <-*rchan.channel:
 		case <-time.After(timeout * time.Second):
-			err = errors.New(`Timeout waiting on response channel`)
+			return result, errors.New(`Timeout waiting on response channel`)
 		}
 	} else {
 		res = <-*rchan.channel
 	}
-	if err == nil {
-		result, err = res.unpack()
+	if res == nil {
+		return result, errors.New(`Empty result received`)
 	}
-	close(*rchan.channel)
+	result, err = res.unpack()
 
 	return result, err
 }
@@ -249,32 +259,54 @@ func (c *Connection) connected(status bool) {
 func (c *Connection) connect() (err error) {
 	c.connected(false)
 	c.connectLock.Lock()
-	defer c.connected(true)
 	defer c.connectLock.Unlock()
 
 	// If we blocked on the lock, and another routine connected in the mean
 	// time, return early
 	if c.Connected {
-		c.connectLock.Unlock()
 		return
 	}
 
 	if c.conn != nil {
 		_ = c.conn.Close()
 	}
+
 	c.conn, err = net.Dial(`tcp`, c.address)
-	for err != nil {
-		log.WithField(`error`, err).Error(`Connecting to Kodi`)
-		log.Info(`Attempting reconnect...`)
-		time.Sleep(time.Second)
-		c.conn, err = net.Dial(`tcp`, c.address)
+	if err != nil {
+		success := make(chan bool, 1)
+		done := make(chan bool, 1)
+		go func() {
+			for err != nil {
+				log.WithField(`error`, err).Error(`Connecting to Kodi`)
+				log.Info(`Attempting reconnect...`)
+				time.Sleep(time.Second)
+				c.conn, err = net.Dial(`tcp`, c.address)
+				select {
+				case <-done:
+					break
+				default:
+				}
+			}
+			success <- true
+		}()
+		if c.timeout > 0 {
+			select {
+			case <-success:
+			case <-time.After(c.timeout * time.Second):
+				done <- true
+				log.Error(`Timeout connecting to Kodi`)
+				return err
+			}
+		} else {
+			<-success
+		}
 	}
-	err = nil
 
 	c.enc = json.NewEncoder(c.conn)
 	c.dec = json.NewDecoder(c.conn)
 
 	log.Info(`Connected to Kodi`)
+	c.connected(true)
 
 	return
 }
@@ -284,14 +316,10 @@ func (c *Connection) writer() {
 	for {
 		var req interface{}
 		req = <-c.write
-		err := c.enc.Encode(req)
-		if _, ok := err.(net.Error); ok {
-			err = c.connect()
-			c.enc.Encode(req)
-		} else if err != nil {
+		for err := c.enc.Encode(req); err != nil; {
 			log.WithField(`error`, err).Warn(`Failed encoding request for Kodi`)
-			err = c.connect()
-			c.enc.Encode(req)
+			c.connect()
+			err = c.enc.Encode(req)
 		}
 	}
 }
@@ -304,7 +332,9 @@ func (c *Connection) reader() {
 		if _, ok := err.(net.Error); err == io.EOF || ok {
 			log.WithField(`error`, err).Error(`Reading from Kodi`)
 			log.Error(`If this error persists, make sure you are using the JSON-RPC port, not the HTTP port!`)
-			err = c.connect()
+			for err != nil {
+				err = c.connect()
+			}
 		} else if err != nil {
 			log.WithField(`error`, err).Error(`Decoding response from Kodi`)
 			continue
