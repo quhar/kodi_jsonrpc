@@ -19,7 +19,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-// Main type for interacting with Kodi
+// Connection is the main type for interacting with Kodi
 type Connection struct {
 	conn             net.Conn
 	write            chan interface{}
@@ -41,7 +41,7 @@ type Connection struct {
 	timeout time.Duration
 }
 
-// RPC Request type
+// Request is the RPC request type
 type Request struct {
 	Id      *uint32                 `json:"id,omitempty"`
 	Method  string                  `json:"method"`
@@ -49,21 +49,19 @@ type Request struct {
 	JsonRPC string                  `json:"jsonrpc"`
 }
 
-// RPC response error type
 type rpcError struct {
 	Code    float64                 `json:"code"`
 	Message string                  `json:"message"`
 	Data    *map[string]interface{} `json:"data"`
 }
 
-// RPC Response provides a reader for returning responses
+// Reponse provides a reader for returning RPC responses
 type Response struct {
 	channel  *chan *rpcResponse
 	Pending  bool // If Pending is false, Response is unwanted, or been consumed
 	readLock sync.Mutex
 }
 
-// RPC response type
 type rpcResponse struct {
 	Id      *float64                `json:"id"`
 	JsonRPC string                  `json:"jsonrpc"`
@@ -129,7 +127,7 @@ func SetLogLevel(level log.Level) {
 	log.SetLevel(level)
 }
 
-// Return the result and any errors from the response channel
+// Read returns the result and any errors from the response channel
 // If timeout (seconds) is greater than zero, read will fail if not returned
 // within this time.
 func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{}, err error) {
@@ -221,7 +219,7 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 	return
 }
 
-// Send an RPC Send to the Kodi server.
+// Send an RPC request to the Kodi server.
 // Returns a Response, but does not attach a channel for it if want_response is
 // false (for fire-and-forget commands that don't return any useful response).
 // Returns error on closed connection
@@ -256,7 +254,7 @@ func (c *Connection) Send(req Request, want_response bool) (res Response, err er
 	return
 }
 
-// set whether we're connected or not
+// connected sets whether we're currently connected or not
 func (c *Connection) connected(status bool) {
 	c.connectedLock.Lock()
 	defer c.connectedLock.Unlock()
@@ -385,7 +383,8 @@ func (c *Connection) reader() {
 	}
 }
 
-// Close Kodi connection
+// Close closes the Kodi connection and associated channels
+// Subsequent Sends will return an error for closed connections
 func (c *Connection) Close() {
 	if c.Closed {
 		return

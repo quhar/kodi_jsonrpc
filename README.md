@@ -50,7 +50,7 @@ type Connection struct {
 }
 ```
 
-Main type for interacting with Kodi
+Connection is the main type for interacting with Kodi
 
 #### func  New
 
@@ -69,16 +69,17 @@ to avoid leaks.
 ```go
 func (c *Connection) Close()
 ```
-Close Kodi connection
+Close closes the Kodi connection and associated channels Subsequent Sends will
+return an error for closed connections
 
 #### func (\*Connection) Send
 
 ```go
-func (c *Connection) Send(req Request, want_response bool) Response
+func (c *Connection) Send(req Request, want_response bool) (res Response, err error)
 ```
-Send an RPC Send to the Kodi server. Returns a Response, but does not attach a
-channel for it if `want_response` is false (for fire-and-forget commands that
-don't return any useful response).
+Send an RPC request to the Kodi server. Returns a Response, but does not attach
+a channel for it if want_response is false (for fire-and-forget commands that
+don't return any useful response). Returns error on closed connection
 
 #### type Notification
 
@@ -108,7 +109,7 @@ type Request struct {
 }
 ```
 
-RPC Request type
+Request is the RPC request type
 
 #### type Response
 
@@ -118,12 +119,12 @@ type Response struct {
 }
 ```
 
-RPC Response provides a reader for returning responses
+Reponse provides a reader for returning RPC responses
 
 #### func (\*Response) Read
 
 ```go
 func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{}, err error)
 ```
-Return the result and any errors from the response channel If timeout (seconds)
-is greater than zero, read will fail if not returned within this time.
+Read returns the result and any errors from the response channel If timeout
+(seconds) is greater than zero, read will fail if not returned within this time.
