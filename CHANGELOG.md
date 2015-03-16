@@ -1,4 +1,23 @@
 
+<a name="v2.0.0"></a>
+# v2.0.0 (2015-03-17)
+
+## :bug: Bug Fixes
+
+- **core**:
+  - Implement ring buffer for notification writes ([a9e60882](https://github.com/StreamBoat/kodi_jsonrpc/commit/a9e60882ddab062ca7fced3cb56d5586b9e1ad1f))  <br>Clients that don't process notifications could result in blocked reader
+    goroutine
+
+## :house: Housekeeping
+
+- **core**:
+  - Return error trying to send on closed connection ([2ad70a41](https://github.com/StreamBoat/kodi_jsonrpc/commit/2ad70a415c661980a3001245d3757ee483461c09))
+
+## Breaking Changes
+
+- due to [2ad70a41](https://github.com/StreamBoat/kodi_jsonrpc/commit/2ad70a415c661980a3001245d3757ee483461c09), `Send` now returns `(Response, error)`
+
+
 <a name="v1.0.3"></a>
 # v1.0.3 (2014-11-25)
 
