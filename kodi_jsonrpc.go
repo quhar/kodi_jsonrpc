@@ -353,7 +353,17 @@ func (c *Connection) reader() {
 			n := Notification{}
 			n.Method = *res.Method
 			mapstructure.Decode(res.Params, &n.Params)
-			c.Notifications <- n
+			// Implement notification writes as a ring buffer.
+			// In case the client is not processing notifications, we don't want
+			// to block here, instead drop the oldest notification and log a
+			// warning
+			select {
+			case c.Notifications <- n:
+			default:
+				<-c.Notifications
+				c.Notifications <- n
+				log.Warn(`Dropped oldest notification, buffer full`)
+			}
 			c.notificationWait.Done()
 		} else if res.Id != nil {
 			if ch := c.responses[uint32(*res.Id)]; ch != nil {
