@@ -201,7 +201,11 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 	go c.reader()
 	go c.writer()
 
-	rchan := c.Send(Request{Method: `JSONRPC.Version`}, true)
+	rchan, _ := c.Send(Request{Method: `JSONRPC.Version`}, true)
+	if err != nil {
+		log.WithField(`error`, err).Error(`Connection closed`)
+		return err
+	}
 
 	res, err := rchan.Read(c.timeout)
 	if err != nil {
@@ -220,9 +224,13 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 // Send an RPC Send to the Kodi server.
 // Returns a Response, but does not attach a channel for it if want_response is
 // false (for fire-and-forget commands that don't return any useful response).
-func (c *Connection) Send(req Request, want_response bool) Response {
+// Returns error on closed connection
+func (c *Connection) Send(req Request, want_response bool) (res Response, err error) {
+	if c.Closed {
+		return res, errors.New(`Cannot send on closed connection`)
+	}
 	req.JsonRPC = `2.0`
-	res := Response{}
+	res = Response{}
 
 	c.writeWait.Add(1)
 	if want_response == true {
@@ -245,7 +253,7 @@ func (c *Connection) Send(req Request, want_response bool) Response {
 	}
 	c.writeWait.Done()
 
-	return res
+	return
 }
 
 // set whether we're connected or not
