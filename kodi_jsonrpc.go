@@ -31,7 +31,7 @@ type Connection struct {
 	connectLock      sync.Mutex
 	writeWait        sync.WaitGroup
 	notificationWait sync.WaitGroup
-	requestId        uint32
+	requestID        uint32
 	responses        map[uint32]*chan *rpcResponse
 
 	Connected bool
@@ -55,7 +55,7 @@ type rpcError struct {
 	Data    *map[string]interface{} `json:"data"`
 }
 
-// Reponse provides a reader for returning RPC responses
+// Response provides a reader for returning RPC responses
 type Response struct {
 	channel  *chan *rpcResponse
 	Pending  bool // If Pending is false, Response is unwanted, or been consumed
@@ -84,11 +84,15 @@ type Notification struct {
 }
 
 const (
+	// VERSION hold the version number for this library
 	VERSION = `2.0.0`
 
-	// Minimum Kodi/XBMC API version
+	// KODI_MIN_VERSION specifies the minimum Kodi/XBMC API version compatible
+	// with this library
 	KODI_MIN_VERSION = 6
 
+	// LogDebugLevel and friends export log level constants, mapped to their
+	// logrus equivalents
 	LogDebugLevel = log.DebugLevel
 	LogInfoLevel  = log.InfoLevel
 	LogWarnLevel  = log.WarnLevel
@@ -166,9 +170,7 @@ func (rchan *Response) Read(timeout time.Duration) (result map[string]interface{
 // Unpack the result and any errors from the Response
 func (res *rpcResponse) unpack() (result map[string]interface{}, err error) {
 	if res.Error != nil {
-		err = errors.New(fmt.Sprintf(
-			`Kodi error (%v): %v`, res.Error.Code, res.Error.Message,
-		))
+		err = fmt.Errorf(`Kodi error (%v): %v`, res.Error.Code, res.Error.Message)
 	} else if res.Result != nil {
 		result = *res.Result
 	} else {
@@ -220,10 +222,10 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 }
 
 // Send an RPC request to the Kodi server.
-// Returns a Response, but does not attach a channel for it if want_response is
+// Returns a Response, but does not attach a channel for it if wantResponse is
 // false (for fire-and-forget commands that don't return any useful response).
 // Returns error on closed connection
-func (c *Connection) Send(req Request, want_response bool) (res Response, err error) {
+func (c *Connection) Send(req Request, wantResponse bool) (res Response, err error) {
 	if c.Closed {
 		return res, errors.New(`Cannot send on closed connection`)
 	}
@@ -231,12 +233,12 @@ func (c *Connection) Send(req Request, want_response bool) (res Response, err er
 	res = Response{}
 
 	c.writeWait.Add(1)
-	if want_response == true {
+	if wantResponse == true {
 		c.responseLock.Lock()
-		id := c.requestId
+		id := c.requestID
 		ch := make(chan *rpcResponse)
 		c.responses[id] = &ch
-		c.requestId++
+		c.requestID++
 		c.responseLock.Unlock()
 		req.Id = &id
 
