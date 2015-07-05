@@ -349,29 +349,34 @@ func (c *Connection) reader() {
 		}
 		if res.Id == nil && res.Method != nil {
 			c.notificationWait.Add(1)
-			if res.Params != nil {
-				log.WithFields(log.Fields{
-					`notification.Method`: *res.Method,
-					`notification.Params`: *res.Params,
-				}).Debug(`Received notification from Kodi`)
-			} else {
-				log.WithField(`notification.Method`, *res.Method).Debug(`Received notification from Kodi`)
-			}
-			n := Notification{}
-			n.Method = *res.Method
-			mapstructure.Decode(res.Params, &n.Params)
-			// Implement notification writes as a ring buffer.
-			// In case the client is not processing notifications, we don't want
-			// to block here, instead drop the oldest notification and log a
-			// warning
-			select {
-			case c.Notifications <- n:
-			default:
-				<-c.Notifications
-				c.Notifications <- n
-				log.Warn(`Dropped oldest notification, buffer full`)
-			}
-			c.notificationWait.Done()
+			// Process notifications in a separate routine so we don't delay the
+			// processing of standard responses.  This does mean losing ordering
+			// guarantees for notifications.
+			go func() {
+				if res.Params != nil {
+					log.WithFields(log.Fields{
+						`notification.Method`: *res.Method,
+						`notification.Params`: *res.Params,
+					}).Debug(`Received notification from Kodi`)
+				} else {
+					log.WithField(`notification.Method`, *res.Method).Debug(`Received notification from Kodi`)
+				}
+				n := Notification{}
+				n.Method = *res.Method
+				mapstructure.Decode(res.Params, &n.Params)
+				// Implement notification writes as a ring buffer.
+				// In case the client is not processing notifications, we don't
+				// want to block indefinitely here, instead drop the oldest
+				// notification after 200ms, and log a warning
+				select {
+				case c.Notifications <- n:
+				case <-time.After(200 * time.Millisecond):
+					<-c.Notifications
+					c.Notifications <- n
+					log.Warn(`Dropped oldest notification, buffer full`)
+				}
+				c.notificationWait.Done()
+			}()
 		} else if res.Id != nil {
 			if ch := c.responses[uint32(*res.Id)]; ch != nil {
 				if res.Result != nil {
