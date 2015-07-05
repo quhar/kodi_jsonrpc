@@ -349,7 +349,14 @@ func (c *Connection) reader() {
 		}
 		if res.Id == nil && res.Method != nil {
 			c.notificationWait.Add(1)
-			log.WithField(`notification`, res).Debug(`Received notification from Kodi`)
+			if res.Params != nil {
+				log.WithFields(log.Fields{
+					`notification.Method`: *res.Method,
+					`notification.Params`: *res.Params,
+				}).Debug(`Received notification from Kodi`)
+			} else {
+				log.WithField(`notification.Method`, *res.Method).Debug(`Received notification from Kodi`)
+			}
 			n := Notification{}
 			n.Method = *res.Method
 			mapstructure.Decode(res.Params, &n.Params)
