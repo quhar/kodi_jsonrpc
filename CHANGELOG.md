@@ -1,4 +1,13 @@
 
+<a name="v2.0.1"></a>
+# v2.0.1 (2015-07-05)
+
+## :house: Housekeeping
+
+- **style**:
+  - Fix lint that won't break existing APIs ([54af862a](https://github.com/StreamBoat/kodi_jsonrpc/commit/54af862af1928000f87bcbb3092cf1ac59746960))
+
+
 <a name="v2.0.0"></a>
 # v2.0.0 (2015-03-17)
 
