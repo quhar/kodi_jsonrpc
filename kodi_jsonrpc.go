@@ -326,7 +326,9 @@ func (c *Connection) writer() {
 		req = <-c.write
 		for err := c.enc.Encode(req); err != nil; {
 			log.WithField(`error`, err).Warn(`Failed encoding request for Kodi`)
-			c.connect()
+			if err = c.connect(); err != nil {
+				continue
+			}
 			err = c.enc.Encode(req)
 		}
 	}
@@ -363,7 +365,11 @@ func (c *Connection) reader() {
 				}
 				n := Notification{}
 				n.Method = *res.Method
-				mapstructure.Decode(res.Params, &n.Params)
+				err := mapstructure.Decode(res.Params, &n.Params)
+				if err != nil {
+					log.WithField(`notification.Method`, *res.Method).Warn(`Decoding notifcation failed`)
+					return
+				}
 				// Implement notification writes as a ring buffer.
 				// In case the client is not processing notifications, we don't
 				// want to block indefinitely here, instead drop the oldest

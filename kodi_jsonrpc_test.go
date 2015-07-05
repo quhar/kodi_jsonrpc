@@ -11,7 +11,11 @@ func ExampleNew() {
 	}
 
 	request := Request{Method: `JSONRPC.Version`}
-	response := kodi.Send(request, true) // second param says we need a response
+	response, err := kodi.Send(request, true) // second param says we need a response
+
+	if err != nil {
+		panic(fmt.Sprintf(`Kodi send failed with error: %v`, err))
+	}
 
 	// wait indefinitely for response (timeout 0)
 	result, err := response.Read(0)
