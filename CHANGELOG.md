@@ -1,4 +1,13 @@
 
+<a name="v2.0.3"></a>
+# v2.0.3 (2015-07-05)
+
+## :house: Housekeeping
+
+- **logs**:
+  - Log notifications by field ([7c613ef3](https://github.com/StreamBoat/kodi_jsonrpc/commit/7c613ef3a0edbe13f33b9060e7cb55be26244588))
+
+
 <a name="v2.0.2"></a>
 # v2.0.2 (2015-07-05)
 
