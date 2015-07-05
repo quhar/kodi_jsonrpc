@@ -1,4 +1,19 @@
 
+<a name="v2.0.4"></a>
+# v2.0.4 (2015-07-05)
+
+## :bug: Bug Fixes
+
+- **core**:
+  - Drop fewer notifications ([22b24707](https://github.com/StreamBoat/kodi_jsonrpc/commit/22b2470773405242524e4a8b93ccc6c9216170dd))  <br>After converting notifications to a ring buffer, we were dropping them
+    on notification floods, even for clients that were consuming
+    notifications.  The buffer now drops old notifications after a 200ms
+    delay to give clients some time to catch up, and notifications are
+    processed in their own routine so that this delay doesn't block normal
+    responses.  The trade-off is that we lose notification ordering
+    guarantees, but I think this is probably acceptable.
+
+
 <a name="v2.0.3"></a>
 # v2.0.3 (2015-07-05)
 
