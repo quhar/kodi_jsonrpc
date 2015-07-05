@@ -85,7 +85,7 @@ type Notification struct {
 
 const (
 	// VERSION hold the version number for this library
-	VERSION = `2.0.0`
+	VERSION = `2.0.1`
 
 	// KODI_MIN_VERSION specifies the minimum Kodi/XBMC API version compatible
 	// with this library
