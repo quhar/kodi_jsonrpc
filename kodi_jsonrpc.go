@@ -85,7 +85,7 @@ type Notification struct {
 
 const (
 	// VERSION hold the version number for this library
-	VERSION = `2.0.1`
+	VERSION = `2.0.2`
 
 	// KODI_MIN_VERSION specifies the minimum Kodi/XBMC API version compatible
 	// with this library
@@ -349,7 +349,7 @@ func (c *Connection) reader() {
 		}
 		if res.Id == nil && res.Method != nil {
 			c.notificationWait.Add(1)
-			log.WithField(`response.Method`, *res.Method).Debug(`Received notification from Kodi`)
+			log.WithField(`notification`, res).Debug(`Received notification from Kodi`)
 			n := Notification{}
 			n.Method = *res.Method
 			mapstructure.Decode(res.Params, &n.Params)
