@@ -1,4 +1,13 @@
 
+<a name="v2.0.2"></a>
+# v2.0.2 (2015-07-05)
+
+## :house: Housekeeping
+
+- **logs**:
+  - Include full notification content in debug output ([942adb8d](https://github.com/StreamBoat/kodi_jsonrpc/commit/942adb8d38828599524bedf359f18ac17cf20f90))
+
+
 <a name="v2.0.1"></a>
 # v2.0.1 (2015-07-05)
 
