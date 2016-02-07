@@ -36,6 +36,7 @@ type Connection struct {
 
 	Connected bool
 	Closed    bool
+    quitWriter  chan bool
 
 	address string
 	timeout time.Duration
@@ -112,8 +113,8 @@ func init() {
 //
 // User must ensure Close() is called on returned Connection when finished with
 // it, to avoid leaks.
-func New(address string, timeout time.Duration) (conn Connection, err error) {
-	conn = Connection{}
+func New(address string, timeout time.Duration) (conn *Connection, err error) {
+	conn = &Connection{}
 	err = conn.init(address, timeout)
 
 	return conn, err
@@ -197,9 +198,10 @@ func (c *Connection) init(address string, timeout time.Duration) (err error) {
 	c.Notifications = make(chan Notification, 16)
 
 	c.responses = make(map[uint32]*chan *rpcResponse)
+    c.quitWriter = make(chan bool)
 
 	go c.reader()
-	go c.writer()
+	go c.writer(c.quitWriter)
 
 	rchan, _ := c.Send(Request{Method: `JSONRPC.Version`}, true)
 	if err != nil {
@@ -320,22 +322,21 @@ func (c *Connection) connect() (err error) {
 }
 
 // writer loop processes outbound requests
-func (c *Connection) writer() {
+func (c *Connection) writer(quit chan bool) {
 	for {
-		var req interface{}
-		req = <-c.write
-		// Exit gorouting if channel has been closed
-		if req == nil {
-			return
-		}
-		for err := c.enc.Encode(req); err != nil; {
-			log.WithField(`error`, err).Warn(`Failed encoding request for Kodi`)
-			if err = c.connect(); err != nil {
-				continue
-			}
-			err = c.enc.Encode(req)
-		}
-	}
+		select {
+        case req := <-c.write:
+            for err := c.enc.Encode(req); err != nil; {
+                log.WithField(`error`, err).Warn(`Failed encoding request for Kodi`)
+                if err = c.connect(); err != nil {
+                    continue
+                }
+                err = c.enc.Encode(req)
+            }
+        case <- quit:
+            return
+        }
+    }
 }
 
 // reader loop processes inbound responses and notifications
@@ -422,6 +423,7 @@ func (c *Connection) Close() {
 
 	if c.write != nil {
 		c.writeWait.Wait()
+        c.quitWriter <- true
 		close(c.write)
 	}
 	if c.Notifications != nil {
